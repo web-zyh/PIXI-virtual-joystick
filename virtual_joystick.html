@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta content="telephone=no,email=no" name="format-detection">
+    <meta name="full-screen" content="true" />
+    <meta name="x5-fullscreen" content="true" />
+    <meta name="360-fullscreen" content="true" />
+
+    <script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.8.6/pixi.min.js"></script>
+    <style>
+        body {
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+    <title>PIXI摇杆 亲测有效</title>
+</head>
+
+<body>
+
+    <div id="game"></div>
+    <script>
+        var GameOptions = {
+            width: 800, //游戏屏幕的高度。
+            height: 600, //游戏屏幕的宽度。
+            ground_y: 400 - 65, //地面y坐标
+            fps: 10,
+            actorWidth: 57 * 2 * 0.8,
+            actorHeight: 61 * 2 * 0.8,
+
+            //--hero的行走向量速度。
+            hero_run_x_speed: 15,
+            hero_run_y_speed: 30 //hero跳跃时候向上的速度。
+
+        };
+    </script>
+    <script>
+        //--虚拟手柄控件。
+        function GameJoyPad(parent_container, _opts) {
+            var me = this;
+            this.settings = {
+                outer: "为自己的摇杆图片",//摇杆的背景。
+                inner: "为自己的摇杆图片", //摇杆正体。
+                rockerX: 300, //摇杆的x坐标 
+                rockerY: 220, //摇杆的y坐标
+                //--注意，所有缩放的尺寸都是按照unitiy3d获得的这些摇杆素材来设置的，假如替换了texture，请重新设置缩放尺寸。
+                outer_scale: {//outer 需要缩放的比例，默认是x和y上面都是1
+                    x: 0.4,
+                    y: 0.4
+                },
+                inner_scale: {//摇杆主体需要缩放的比例，默认x、y都是1
+                    x: 0.8,
+                    y: 0.8
+                },
+                //--摇杆摇动角度变换时候的回调函数。
+                onJoyStickMove: function (now_stick_angle) {
+
+                }
+
+            };
+
+            // $.extend(this.settings, _opts);
+            //--基本赋值。
+            this.parent_container = parent_container;
+            this.containerCom = {};
+            this.outer = {};
+            this.inner = {};
+            this.outer_radius = 0;//这是外置摇杆半径。
+            this.inner_radius = 0;//这是摇内置摇杆的半径。
+
+            //加载相关资源
+            me.loadResources(function () {
+                me.init_rocker();
+            });
+
+        }
+        GameJoyPad.prototype.loadResources = function (callback) {
+            var me = this;
+            PIXI.loader.add('outer', me.settings.outer);
+            PIXI.loader.add('inner', me.settings.inner);
+            PIXI.loader.once('complete', function () {
+                if (callback) {
+                    callback();
+                }
+            });
+            PIXI.loader.load();
+        }
+        //--初始化摇杆。
+        GameJoyPad.prototype.init_rocker = function () {
+            var outerImg = PIXI.Texture.fromImage(this.settings.outer);
+            var innerImg = PIXI.Texture.fromImage(this.settings.inner);
+
+            this.containerCom = new PIXI.Container();
+            this.outer = new PIXI.Sprite(outerImg);
+            this.inner = new PIXI.Sprite(innerImg);
+            this.outer.scale = this.settings.outer_scale;
+            this.inner.scale = this.settings.inner_scale;
+            this.outer.anchor = { x: 0.5, y: 0.5 };
+            this.inner.anchor = { x: 0.5, y: 0.5 };
+            this.containerCom.anchor = { x: 0.5, y: 0.5 };
+            this.containerCom.addChild(this.outer);
+            this.containerCom.addChild(this.inner);
+
+            this.outer_radius = this.containerCom.width / 2; //外置摇杆半径
+            this.inner_radius = this.inner.width / 2; //内置摇杆半径
+
+            this.containerCom.position = {
+                x: this.settings.rockerX,
+                y: this.settings.rockerY
+            };
+            this.parent_container.addChild(this.containerCom);
+            this.init_rocker_events();
+        }
+        GameJoyPad.prototype.init_rocker_events = function () {
+            var me = this;
+            this.containerCom.interactive = true;
+            var dragging = false;
+            var eventData = {};
+            var touch_event_id = 0;
+            /******pixi bug1：当两个手指其中一个，譬如摇杆，另一个手指点击按钮，摇杆会接收到touch end事件。醉了。******/
+            function onDragStart(event) {
+                //--注意，pc端的identifier是undefined。
+                eventData = event.data;
+                var startPosition = eventData.getLocalPosition(this.parent);
+                touch_event_id = event.data.identifier;
+                dragging = true;
+            }
+            function onDragEnd(event) {
+                if (dragging == false) {
+                    return;
+                }
+                if (touch_event_id != event.data.identifier) {
+                    return;
+                }
+                dragging = false;
+                me.inner.position = {
+                    x: 0,
+                    y: 0
+                };
+            }
+            function onDragMove(event) {
+
+                if (touch_event_id != event.data.identifier) {
+                    return;
+                }
+                if (dragging == false) {
+                    return;
+                }
+                var newPosition = eventData.getLocalPosition(this.parent);
+
+                var side_x = newPosition.x - me.settings.rockerX;
+                var side_y = newPosition.y - me.settings.rockerY;
+
+                var center_point = {//--中心点。
+                    x: 0,
+                    y: 0
+                };
+
+                var current_angle = 0; //当前摇杆的角度
+
+
+                if (side_x == 0 && side_y == 0) {
+                    return;
+                }
+                //判断执行计算的半径。
+                var _cal_radius = 0;
+
+                if (side_x * side_x + side_y * side_y >= me.outer_radius * me.outer_radius) {
+                    _cal_radius = me.outer_radius;
+                    //--假如大于的话，那么就按照圆弧计算坐标。
+
+                }
+                else {
+                    _cal_radius = me.outer_radius - me.inner_radius;
+                }
+
+
+                if (side_x == 0) {
+                    if (side_y > 0) {
+                        center_point = {
+                            x: 0
+                            , y: side_y > me.outer_radius ? me.outer_radius : side_y
+                        };
+                        current_angle = 270;//180度。
+                    }
+                    else {
+                        center_point = {
+                            x: 0
+                            , y: -(Math.abs(side_y) > me.outer_radius ? me.outer_radius : Math.abs(side_y))
+                        };
+                        current_angle = 90;//901度
+                    }
+                    // console.log(
+                    //     center_point,'==>center_point'
+                    // )
+                    // console.log(
+                    //     current_angle,'==>current_angle'
+                    // )
+                    me.inner.position = center_point;
+                    me.settings.onJoyStickMove(current_angle);
+                    return;
+                }
+                else if (side_y == 0) {
+                    if (side_x > 0) {
+                        center_point = {
+                            x: (Math.abs(side_x) > me.outer_radius ? me.outer_radius : Math.abs(side_x))
+                            , y: 0
+                        };
+                        current_angle = 0;//0度
+                    }
+                    else {
+                        center_point = {
+                            x: -(Math.abs(side_x) > me.outer_radius ? me.outer_radius : Math.abs(side_x))
+                            , y: 0
+                        };
+                        current_angle = 180;//180度
+                    }
+
+                    me.inner.position = center_point;
+                    me.settings.onJoyStickMove(current_angle);
+                    return;
+                }
+                var _tan_val = Math.abs(side_y / side_x);
+                var _radian = Math.atan(_tan_val);
+                var _angle = _radian * 180 / Math.PI;
+                current_angle = _angle;
+
+                //计算现在摇杆的中心点主坐标了。
+                var center_x = 0;
+                var center_y = 0;
+                if (side_x * side_x + side_y * side_y >= me.outer_radius * me.outer_radius) {
+                    center_x = me.outer_radius * Math.cos(_radian);
+                    center_y = me.outer_radius * Math.sin(_radian);
+
+                }
+                else {
+                    center_x = Math.abs(side_x) > me.outer_radius ? me.outer_radius : Math.abs(side_x);
+                    center_y = Math.abs(side_y) > me.outer_radius ? me.outer_radius : Math.abs(side_y);
+                }
+
+                if (side_y < 0) {
+                    center_y = -Math.abs(center_y);
+                }
+                if (side_x < 0) {
+                    center_x = -Math.abs(center_x);
+                }
+                if (side_x > 0 && side_y < 0) {
+                    //--锐角。
+                }
+                else if (side_x < 0 && side_y < 0) {
+                    //--钝角。
+                    current_angle = 180 - current_angle;
+                }
+                else if (side_x < 0 && side_y > 0) {
+                    current_angle = current_angle + 180;
+                }
+                else if (side_x > 0 && side_y > 0) {
+                    current_angle = 360 - current_angle;
+                }
+                center_point = {
+                    x: center_x,
+                    y: center_y
+                };
+
+                console.log(
+                    center_point, '==>center_point'
+                )
+                console.log(
+                    current_angle, '==>current_angle'
+                )
+
+                me.inner.position = center_point;
+                me.settings.onJoyStickMove(current_angle);
+            };
+
+            // events for drag start
+            this.containerCom.on('mousedown', onDragStart)
+                .on('touchstart', onDragStart)
+                // events for drag end
+                .on('mouseup', onDragEnd)
+                .on('mouseupoutside', onDragEnd)
+                .on('touchend', onDragEnd)
+                .on('touchendoutside', onDragEnd)
+                // events for drag move
+                .on('mousemove', onDragMove)
+                .on('touchmove', onDragMove);
+        }
+
+    </script>
+
+    <script>
+        var gamePIXI = new PIXI.Container(0x66FF99);
+        var renderer = PIXI.autoDetectRenderer(GameOptions.width, GameOptions.height, { backgroundColor: 0x1099bb });
+        $("#game").append(renderer.view);
+        var _joy_pad = new GameJoyPad(gamePIXI);
+
+        function gameLoop() {
+            requestAnimationFrame(gameLoop);
+            renderer.render(gamePIXI);
+        }
+        requestAnimationFrame(gameLoop);
+
+    </script>
+
+
+</body>
+
+</html>
