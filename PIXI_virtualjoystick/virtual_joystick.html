@@ -267,14 +267,7 @@
                     x: center_x,
                     y: center_y
                 };
-
-                console.log(
-                    center_point, '==>center_point'
-                )
-                console.log(
-                    current_angle, '==>current_angle'
-                )
-
+                getDirection(center_point);
                 me.inner.position = center_point;
                 me.settings.onJoyStickMove(current_angle);
             };
@@ -290,6 +283,34 @@
                 // events for drag move
                 .on('mousemove', onDragMove)
                 .on('touchmove', onDragMove);
+            function getDirection(pos) {
+                    //let hero = heroCom.children[0];
+                    var rad = Math.atan2(pos.y, pos.x);// [-PI, PI]
+                    if ((rad >= -Math.PI / 8 && rad < 0) || (rad >= 0 && rad < Math.PI / 8)) {
+                        console.log("右");
+                        // return cc.v2(1, 0);// 右
+                    } else if (rad >= Math.PI / 8 && rad < 3 * Math.PI / 8) {
+                        console.log("右下");
+                        // return cc.v2(1, 1);// 右下
+                    } else if (rad >= 3 * Math.PI / 8 && rad < 5 * Math.PI / 8) {
+                        console.log("下");
+                        // return cc.v2(0, 1);// <<下>>
+                    } else if (rad >= 5 * Math.PI / 8 && rad < 7 * Math.PI / 8) {
+                        console.log("左下");
+                        // return cc.v2(-1, 1);// 左下
+                    } else if ((rad >= 7 * Math.PI / 8 && rad < Math.PI) || (rad >= -Math.PI && rad < -7 * Math.PI / 8)) {
+                        console.log("左");
+                        // return cc.v2(-1, 0);// 左
+                    } else if (rad >= -7 * Math.PI / 8 && rad < -5 * Math.PI / 8) {
+                        console.log("左上");
+                        // return cc.v2(-1, -1);// 左上
+                    } else if (rad >= -5 * Math.PI / 8 && rad < -3 * Math.PI / 8) {
+                        console.log("上");
+                        // return cc.v2(0, -1);// <<上>>
+                    } else {
+                        console.log("右上");
+                    }
+            }
         }
 
     </script>
